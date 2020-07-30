@@ -1,0 +1,3 @@
+mutation removeUser($userIds: [Int!]!) {
+    removeUser(userIds: $userIds)
+}

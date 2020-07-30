@@ -1,0 +1,12 @@
+query users($userName: String, $telephone: String) {
+    users(userName: $userName, telephone: $telephone) {
+        userId
+        loginId
+        userName
+        telephone
+        role {
+            roleId
+            roleName
+        }
+    }
+}

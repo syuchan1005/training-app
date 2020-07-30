@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<!--suppress HtmlDeprecatedAttribute -->
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no,viewport-fit=cover">
+    <meta name="description" content="training-app">
+    <link rel="icon" href="/favicon.ico">
+    <title>training-app</title>
+
+    <script async src="https://cdn.jsdelivr.net/npm/pwacompat@2.0.9/pwacompat.min.js"
+            integrity="sha384-VcI6S+HIsE80FVM1jgbd6WDFhzKYA0PecD/LcIyMQpT4fMJdijBh0I7Iblaacawc"
+            crossorigin="anonymous"></script>
+    <link rel="manifest" href="/manifest.webmanifest">
+
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/x192.png"/>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css"
+          integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .center {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #top .btn-start {
+            padding: 4px 16px;
+            margin-top: 32px
+        }
+
+        #login .form {
+            max-width: 30vw;
+        }
+
+        #menu > * {
+            margin-top: 8px;
+        }
+
+        #editConfirmation .data-list > * {
+            margin: 8px 0;
+        }
+
+        .btn-back_top {
+            position: fixed;
+            left: 32px;
+            bottom: 32px;
+        }
+    </style>
+    <script>
+      const store = {
+        loginData: undefined,
+        editUserInfo: undefined,
+        editResultUserInfo: undefined,
+        mutationResult: '登録',
+        searchResults: [],
+        mutableUserInfo: [],
+      };
+
+      // Top
+      function onClickStart() {
+        _changePageVisibility('#top', 'none');
+        _changePageVisibility('#login', null);
+      }
+
+      // Login
+      function onClickLogin() {
+        const idInput = document.querySelector('#login_input-id');
+        const passwordInput = document.querySelector('#login_input-password');
+        const loginButton = document.querySelector('#login_input-login');
+        const loading = document.querySelector('#login_input-login-loading');
+        if (!idInput || !passwordInput || !loginButton || !loading) return;
+
+        loginButton.setAttribute('disabled', true);
+        loading.style.display = null;
+        fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: idInput.value,
+            pass: passwordInput.value,
+          }),
+        })
+          .then((res) => {
+            if (res.ok) return res.json();
+            return Promise.reject();
+          })
+          .then((body) => {
+            store.loginData = body;
+            passwordInput.value = '';
+            renderMenuPage();
+            _changePageVisibility('#login', 'none');
+            _changePageVisibility('#menu', null);
+          })
+          .finally(() => {
+            loginButton.removeAttribute('disabled');
+            loading.style.display = 'none';
+          });
+      }
+
+      // Menu
+      function renderMenuPage() {
+        if (!store.loginData) return;
+        const userWelcomeText = document.querySelector('#menu .menu-user_text');
+        if (userWelcomeText) userWelcomeText.innerHTML = `${store.loginData.name}さん、こんにちは`;
+        const registrationMenu = document.querySelector('#menu .menu-registration');
+        if (registrationMenu) {
+          registrationMenu.style.display = (store.loginData.role === 'admin' ? null : 'none');
+        }
+      }
+
+      function onClickSearchInMenu() {
+        _changePageVisibility('#menu', 'none');
+        _changePageVisibility('#searchInput', null);
+      }
+
+      function onClickRegistration() {
+        _changePageVisibility('#menu', 'none');
+        store.editUserInfo = undefined;
+        renderUserInfoToEdit();
+        _changePageVisibility('#editUserInfo', null);
+      }
+
+      // SearchInput
+      function onClickSearch() {
+        fetch('/api/user/search', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            userName: _getInputValue('#searchInput_input-name', ''),
+            telephone: _getInputValue('#searchInput_input-tel', ''),
+          }),
+        })
+          .then((res) => {
+            if (res.ok) return res.json();
+            return Promise.reject();
+          })
+          .then((data) => {
+            store.searchResults = data;
+            renderSearchResult();
+            _changePageVisibility('#searchInput', 'none');
+            _changePageVisibility('#searchResult', null);
+          });
+      }
+
+      // SearchResult
+      function renderSearchResult() {
+        const tbodyElement = document.querySelector('#searchResult .table tbody');
+        tbodyElement.innerHTML = store.searchResults.map((info, i) => `
+        <tr>
+            <td>
+                <div class="form-group form-check">
+                    <input type="checkbox" class="form-check-input" data-index="${i}">
+                </div>
+            </td>
+            <td>${info.loginId}</td>
+            <td>${info.userName}</td>
+            <td>${info.telephone}</td>
+            <td>${info.roleId === 1 ? '管理者' : '一般'}</td>
+        </tr>
+        `)
+          .join('');
+      }
+
+      function onClickEdit() {
+        const selectedIds = [...document.querySelectorAll('input[type="checkbox"][data-index]')]
+          .filter(e => e.checked)
+          .map(e => parseInt(e.dataset.index, 10));
+        if (selectedIds.length !== 1) return;
+        store.editUserInfo = {
+          ...store.searchResults[selectedIds[0]],
+          role: store.searchResults[selectedIds[0]].roleId,
+        };
+        renderUserInfoToEdit();
+        _changePageVisibility('#searchResult', 'none');
+        _changePageVisibility('#editUserInfo', null);
+      }
+
+      function onClickDelete() {
+        const selectedIds = [...document.querySelectorAll('input[type="checkbox"][data-index]')]
+          .filter(e => e.checked)
+          .map(e => parseInt(e.dataset.index, 10));
+        if (selectedIds.length === 0) return;
+        store.mutableUserInfo = selectedIds.map((id) => ({
+          ...store.searchResults[id],
+          role: store.searchResults[id].roleId,
+        }));
+        renderDeleteConfirmation();
+        _changePageVisibility('#searchResult', 'none');
+        _changePageVisibility('#deleteConfirmation', null);
+      }
+
+      // Edit UserInfo
+      function renderUserInfoToEdit() {
+        const textElement = document.querySelector('#editUserInfo_text');
+        if (textElement) textElement.innerHTML = `登録情報を${store.editUserInfo ? '編集' : '入力'}してください`;
+
+        _changeInputValue('#editUserInfo_input-id', store.editUserInfo
+          ? store.editUserInfo.loginId
+          : '');
+        _changeInputValue('#editUserInfo_input-name', store.editUserInfo
+          ? store.editUserInfo.userName
+          : '');
+        _changeInputValue('#editUserInfo_input-tel', store.editUserInfo
+          ? store.editUserInfo.telephone
+          : '');
+        _changeInputValue('#editUserInfo_input-role', store.editUserInfo
+          ? Number(store.editUserInfo.role)
+          : 2);
+        _changeInputValue('#editUserInfo_input-password', store.editUserInfo
+          ? store.editUserInfo.password
+          : '');
+        _changeInputValue('#editUserInfo_input-repassword', store.editUserInfo
+          ? store.editUserInfo.password
+          : '');
+
+        _changePageVisibility('#editUserInfo_input-back', store.editUserInfo ? null : 'none');
+      }
+
+      function onClickConfirm() {
+        const data = {
+          loginId: _getInputValue('#editUserInfo_input-id', store.editUserInfo
+            ? store.editUserInfo.loginId
+            : ''),
+          userName: _getInputValue('#editUserInfo_input-name', store.editUserInfo
+            ? store.editUserInfo.userName
+            : ''),
+          telephone: _getInputValue('#editUserInfo_input-tel', store.editUserInfo
+            ? store.editUserInfo.telephone
+            : ''),
+          roleId: Number(_getInputValue('#editUserInfo_input-role', store.editUserInfo
+            ? store.editUserInfo.role
+            : 2)),
+          password: _getInputValue('#editUserInfo_input-password', store.editUserInfo
+            ? store.editUserInfo.password
+            : ''),
+          rePassword: _getInputValue('#editUserInfo_input-repassword', store.editUserInfo
+            ? store.editUserInfo.password
+            : ''),
+        };
+        if (data.password !== data.rePassword) return;
+
+        _changePageVisibility('#editUserInfo', 'none');
+        store.editResultUserInfo = data;
+        renderEditConfirmation();
+        _changePageVisibility('#editConfirmation', null);
+      }
+
+      function onClickBackInEditUserInfo() {
+        _changePageVisibility('#editUserInfo', 'none');
+
+        _changePageVisibility(store.editUserInfo ? '#searchResult' : '#menu', null);
+      }
+
+      // editConfirmation
+      function renderEditConfirmation() {
+        const dataList = document.querySelector('#editConfirmation .data-list');
+        if (!store.editResultUserInfo || !dataList) return;
+
+        dataList.innerHTML = `
+        <div>ID: ${store.editResultUserInfo.loginId}</div>
+        <div>名前: ${store.editResultUserInfo.userName}</div>
+        <div>TEL: ${store.editResultUserInfo.telephone}</div>
+        <div>権限: ${store.editResultUserInfo.roleId === 1 ? '管理者' : '一般'}</div>
+        `;
+
+        const mutateButton = document.querySelector('#editConfirmation-input_mutate');
+        if (mutateButton) {
+          mutateButton.innerHTML = store.editUserInfo ? '更新' : '登録';
+        }
+      }
+
+      function onClickMutate() {
+        const mutateButton = document.querySelector('#editConfirmation-input_mutate');
+        if (mutateButton) {
+          mutateButton.setAttribute('disabled', true);
+          if (store.editUserInfo) {
+            fetch('/api/user', {
+              method: 'PUT',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                ...store.editResultUserInfo,
+                userId: store.editUserInfo.userId,
+              }),
+            })
+              .then((res) => {
+                if (res.ok) return Promise.resolve();
+                return Promise.reject();
+              })
+              .then(() => {
+                store.editUserInfo = undefined;
+                store.editResultUserInfo = undefined;
+                store.mutationResult = '変更';
+                renderMutationSuccess();
+                _changePageVisibility('#editConfirmation', 'none');
+                _changePageVisibility('#mutationSuccess', null);
+              })
+              .finally(() => {
+                mutateButton.removeAttribute('disabled');
+              });
+          } else {
+            fetch('/api/user', {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                token: store.loginData.token,
+                info: store.editResultUserInfo,
+              }),
+            })
+              .then((res) => {
+                if (res.ok) return Promise.resolve();
+                return Promise.reject();
+              })
+              .then(() => {
+                store.editUserInfo = undefined;
+                store.editResultUserInfo = undefined;
+                store.mutationResult = '追加';
+                renderMutationSuccess();
+                _changePageVisibility('#editConfirmation', 'none');
+                _changePageVisibility('#mutationSuccess', null);
+              })
+              .finally(() => {
+                mutateButton.removeAttribute('disabled');
+              });
+          }
+        }
+      }
+
+      function onClickBackInEditConfirmation() {
+        _changePageVisibility('#editConfirmation', 'none');
+        _changePageVisibility('#editUserInfo', null);
+      }
+
+      // deleteConfirmation
+      function renderDeleteConfirmation() {
+        const tbodyElement = document.querySelector('#deleteConfirmation .table tbody');
+        tbodyElement.innerHTML = store.mutableUserInfo.map((info, i) => `
+        <tr>
+            <td>${info.loginId}</td>
+            <td>${info.userName}</td>
+            <td>${info.telephone}</td>
+            <td>${info.roleId === 1 ? '管理者' : '一般'}</td>
+        </tr>
+        `)
+          .join('');
+      }
+
+      function onClickDeleteInConfirmation() {
+        const deleteButton = document.querySelector('#deleteConfirmation-delete');
+        if (deleteButton) {
+          deleteButton.setAttribute('disabled', true);
+          fetch('/api/user', {
+            method: 'DELETE',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(
+              store.mutableUserInfo.map((info) => info.userId),
+            ),
+          })
+            .then((res) => {
+              if (res.ok) return Promise.resolve();
+              return Promise.reject();
+            })
+            .then(() => {
+              store.mutableUserInfo = undefined;
+              store.mutationResult = '削除';
+              renderMutationSuccess();
+              _changePageVisibility('#deleteConfirmation', 'none');
+              _changePageVisibility('#mutationSuccess', null);
+            })
+            .finally(() => {
+              deleteButton.removeAttribute('disabled');
+            });
+        }
+      }
+
+      function onClickBackInConfirmation() {
+        _changePageVisibility('#deleteConfirmation', 'none');
+        _changePageVisibility('#searchResult', null);
+      }
+
+      // mutationSuccess
+      function renderMutationSuccess() {
+        const text = document.querySelector('#mutationSuccess-text');
+        if (text) text.innerHTML = `正常に${store.mutationResult}されました`;
+      }
+
+      // Util
+      function _changePageVisibility(selector, value) {
+        const element = document.querySelector(selector);
+        if (element) element.style.display = value;
+      }
+
+      function _changeInputValue(selector, value) {
+        const element = document.querySelector(selector);
+        if (element) element.value = value;
+      }
+
+      function _getInputValue(selector, defaultValue) {
+        const element = document.querySelector(selector);
+        if (element) return element.value || defaultValue;
+        return defaultValue;
+      }
+
+      function onClickBackToTop() {
+        _changePageVisibility('#top', null);
+        _changePageVisibility('#login', 'none');
+        _changePageVisibility('#menu', 'none');
+      }
+
+      function onClickBackToMenu(selector) {
+        _changePageVisibility(selector, 'none');
+        _changePageVisibility('#menu', null);
+      }
+    </script>
+</head>
+<body>
+<div id="top" class="center">
+    <div>ユーザー管理システム</div>
+    <button class="btn btn-primary btn-start" onclick="onClickStart()">始める</button>
+</div>
+
+<div id="login" class="center" style="display: none">
+    <div class="form">
+        <div class="form-group">
+            <label for="login_input-id">ID</label>
+            <input type="text" class="form-control" id="login_input-id"/>
+        </div>
+        <div class="form-group">
+            <label for="login_input-password">PASS</label>
+            <input type="password" class="form-control" id="login_input-password"/>
+        </div>
+
+        <button class="btn btn-primary" id="login_input-login" onclick="onClickLogin()">
+            <span class="spinner-grow spinner-grow-sm" style="display: none" id="login_input-login-loading"
+                  role="status" aria-hidden="true"></span>
+            ログイン
+        </button>
+    </div>
+
+    <button class="btn btn-outline-secondary btn-back_top" onclick="onClickBackToTop()">トップに戻る</button>
+</div>
+
+<div id="menu" class="center" style="display: none">
+    <div class="menu-user_text">AAAさん、こんにちは</div>
+    <button class="btn btn-outline-dark menu-search" onclick="onClickSearchInMenu()">検索</button>
+    <button class="btn btn-outline-dark menu-registration" onclick="onClickRegistration()">登録</button>
+
+    <button class="btn btn-outline-secondary btn-back_top" onclick="onClickBackToTop()">ログアウト</button>
+</div>
+
+<div id="searchInput" class="center" style="display: none">
+    <div>検索したいデータ情報を入力してください</div>
+    <div>※すべて空白の場合は全検索を行います</div>
+
+    <div class="form-group">
+        <label for="searchInput_input-name">名前</label>
+        <input type="text" class="form-control" id="searchInput_input-name"/>
+    </div>
+
+    <div class="form-group">
+        <label for="searchInput_input-tel">TEL</label>
+        <input type="text" class="form-control" id="searchInput_input-tel"/>
+    </div>
+
+    <button class="btn btn-primary" id="searchInput_input-search" onclick="onClickSearch()">
+        <span class="spinner-grow spinner-grow-sm" style="display: none" id="searchInput_input-search-loading"
+              role="status" aria-hidden="true"></span>
+        検索
+    </button>
+
+    <button class="btn btn-outline-secondary btn-back_top" onclick="onClickBackToMenu('#searchInput')">メニューに戻る</button>
+</div>
+
+<div id="searchResult" class="center" style="display: none">
+    <div>検索結果</div>
+
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <td scope="col">選択</td>
+            <td scope="col">ID</td>
+            <td scope="col">名前</td>
+            <td scope="col">TEL</td>
+            <td scope="col">権限</td>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>
+                <div class="form-group form-check">
+                    <input type="checkbox" class="form-check-input" id="exampleCheck1">
+                </div>
+            </td>
+            <td>00</td>
+            <td>00</td>
+            <td>00</td>
+            <td>00</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <div>
+        <button class="btn btn-primary" onclick="onClickEdit()">変更</button>
+        <button class="btn btn-primary" onclick="onClickDelete()">削除</button>
+    </div>
+
+    <button class="btn btn-outline-secondary btn-back_top" onclick="onClickBackToMenu('#searchResult')">メニューに戻る</button>
+</div>
+
+<div id="editUserInfo" class="center" style="display: none">
+    <div id="editUserInfo_text">登録情報を(入力/編集)してください</div>
+
+    <div class="form-group">
+        <label for="editUserInfo_input-id">ID</label>
+        <input type="text" class="form-control" id="editUserInfo_input-id"/>
+    </div>
+    <div class="form-group">
+        <label for="editUserInfo_input-name">名前</label>
+        <input type="text" class="form-control" id="editUserInfo_input-name"/>
+    </div>
+    <div class="form-group">
+        <label for="editUserInfo_input-tel">TEL</label>
+        <input type="text" class="form-control" id="editUserInfo_input-tel"/>
+    </div>
+    <div class="form-group">
+        <label for="editUserInfo_input-role">権限</label>
+        <select class="custom-select" id="editUserInfo_input-role">
+            <option selected value="2">一般</option>
+            <option value="1">管理者</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="editUserInfo_input-password">PASS</label>
+        <input type="password" class="form-control" id="editUserInfo_input-password"/>
+    </div>
+    <div class="form-group">
+        <label for="editUserInfo_input-repassword">PASS (再入力)</label>
+        <input type="password" class="form-control" id="editUserInfo_input-repassword"/>
+    </div>
+
+    <div>
+        <button class="btn btn-primary" onclick="onClickConfirm()">確認</button>
+        <button class="btn btn-outline-dark" id="editUserInfo_input-back" onclick="onClickBackInEditUserInfo()">戻る
+        </button>
+    </div>
+
+    <button class="btn btn-outline-secondary btn-back_top" onclick="onClickBackToMenu('#editUserInfo')">メニューに戻る</button>
+</div>
+
+<div id="editConfirmation" class="center" style="display: none">
+    <div>これでよろしいですか？</div>
+
+    <div class="data-list">
+        <div>ID: ***</div>
+        <div>名前: ***</div>
+        <div>TEL: ***</div>
+        <div>権限: ***</div>
+    </div>
+
+    <div>
+        <button class="btn btn-primary" id="editConfirmation-input_mutate" onclick="onClickMutate()">
+            登録/更新
+        </button>
+        <button class="btn btn-outline-dark" onclick="onClickBackInEditConfirmation()">戻る</button>
+    </div>
+
+    <button class="btn btn-outline-secondary btn-back_top" onclick="onClickBackToMenu('#editConfirmation')">メニューに戻る
+    </button>
+</div>
+
+<div id="deleteConfirmation" class="center" style="display: none">
+    <div>下記のデータを削除します</div>
+    <div>よろしいですか？</div>
+
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <td scope="col">ID</td>
+            <td scope="col">名前</td>
+            <td scope="col">TEL</td>
+            <td scope="col">権限</td>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>00</td>
+            <td>00</td>
+            <td>00</td>
+            <td>00</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <div>
+        <button class="btn btn-warning" id="deleteConfirmation-delete" onclick="onClickDeleteInConfirmation()">削除
+        </button>
+        <button class="btn btn-outline-dark" onclick="onClickBackInConfirmation()">戻る</button>
+    </div>
+</div>
+
+<div id="mutationSuccess" class="center" style="display: none">
+    <div id="mutationSuccess-text">正常に登録/変更/削除されました</div>
+
+    <button class="btn btn-outline-secondary btn-back_top" onclick="onClickBackToMenu('#mutationSuccess')">メニューに戻る
+    </button>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+        integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
+        integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
+        crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"
+        integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI"
+        crossorigin="anonymous"></script>
+</body>
+</html>

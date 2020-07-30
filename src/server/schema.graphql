@@ -1,0 +1,52 @@
+scalar Upload
+
+type Query {
+    # auth
+    users(userName: String, telephone: String): [UserInfo!]!
+    roles: [Role!]!
+}
+
+type Mutation {
+    login(id: String!, password: String!): UserToken!
+    revokeToken: Boolean!
+
+    # auth
+    addUser(user: InputUserInfo!): Boolean!
+    editUser(userId: Int!, user: InputEditUserInfo!): Boolean!
+    removeUser(userIds: [Int!]!): Boolean!
+}
+
+type UserToken {
+    name: String!
+    role: Role!
+    token: String!
+}
+
+type UserInfo {
+    userId: Int!
+    loginId: String!
+    userName: String!
+    telephone: String!
+    role: Role!
+}
+
+type Role {
+    roleId: Int!
+    roleName: String!
+    isAdmin: Boolean!
+}
+
+input InputUserInfo {
+    loginId: String!
+    userName: String!
+    telephone: String!
+    password: String!
+    roleId: Int!
+}
+
+input InputEditUserInfo {
+    loginId: String!
+    userName: String!
+    telephone: String!
+    roleId: Int!
+}
