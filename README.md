@@ -1,4 +1,10 @@
 # Training App
+
+研修の一環で作ったWebアプリ
+
+何も対策していないサイトと、少しは対策をしたサイトの2種類がある
+
+
 ## how to run
 ```terminal
 $ npm install
